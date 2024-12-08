@@ -80,18 +80,20 @@ export const handler = async (event, context) => {
       default:
         throw new Error('Unknown endpoint');
     }
+    
+    console.log(`API Response for ${path}: ${JSON.stringify(response)}`);
+    
+    return {
+      statusCode: 200,
+      body: JSON.stringify(response)
+    };
   } catch (error) {
-    console.error(error);
+    console.error(`API Error for ${path}: ${error.message}`);
     return {
       statusCode: 500,
       body: JSON.stringify({ error: error.message })
     };
   }
-
-  return {
-    statusCode: 200,
-    body: JSON.stringify(response)
-  };
 };
 
 export var connection;

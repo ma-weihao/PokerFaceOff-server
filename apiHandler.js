@@ -24,7 +24,7 @@ export const createRoom = async (eventObj) => {
 
             connection.commit(err => {
               if (err) return connection.rollback(() => reject(err));
-              resolve({ user_id: userResult.insertId });
+              resolve({ user_id: userResult.insertId, room_id: room_id });
             });
           });
         });
