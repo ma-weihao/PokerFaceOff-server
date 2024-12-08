@@ -3,7 +3,7 @@
 import mysql from 'mysql';
 var connection;
 
-exports.initialize = (context, callback) => {
+export const initialize = (context, callback) => {
   console.log('initializing');
   connection = mysql.createConnection({
     host: process.env.MYSQL_ENDPOINT,
@@ -12,8 +12,9 @@ exports.initialize = (context, callback) => {
     port: process.env.MYSQL_PORT,
     database: process.env.MYSQL_DBNAME
   });
-  
+  console.log('connection', connection);
   connection.connect((err) => {
+    console.log('connected', connection);
     if (err) {
       console.log('[MYSQL CONNECTION ERROR] - ', err.message);
       callback(err)
@@ -87,3 +88,5 @@ export const handler = async (event, context) => {
     body: JSON.stringify(response)
   };
 };
+
+export var connection;

@@ -1,8 +1,8 @@
-const mysql = require('mysql');
-const connection = require('./index.mjs').connection; // Assuming connection is exported from index.mjs
+import mysql from 'mysql';
+import { connection } from './index.mjs'; // Changed to import statement
 
 // Create a Room
-exports.createRoom = async (eventObj) => {
+export const createRoom = async (eventObj) => {
   const { room_name, created_by_openid, user_name, avatar_url } = eventObj;
   const createRoomQuery = 'INSERT INTO rooms (room_name, created_by_openid) VALUES (?, ?)';
   const createUserQuery = 'INSERT INTO users (username, open_id, avatar_url, role, room_id) VALUES (?, ?, ?, 1, ?)';
@@ -34,7 +34,7 @@ exports.createRoom = async (eventObj) => {
 };
 
 // Join a Room
-exports.joinRoom = async (eventObj) => {
+export const joinRoom = async (eventObj) => {
   const { username, avatar_url, role, room_id } = eventObj;
   const query = 'INSERT INTO users (username, avatar_url, role, room_id) VALUES (?, ?, ?, ?)';
 
@@ -47,7 +47,7 @@ exports.joinRoom = async (eventObj) => {
 };
 
 // Create a Round
-exports.createRound = async (eventObj) => {
+export const createRound = async (eventObj) => {
   const { room_id } = eventObj;
   const query = 'INSERT INTO rounds (room_id, round_number) VALUES (?, (SELECT COALESCE(MAX(round_number), 0) + 1 FROM rounds WHERE room_id = ?))';
 
@@ -60,7 +60,7 @@ exports.createRound = async (eventObj) => {
 };
 
 // Vote
-exports.vote = async (eventObj) => {
+export const vote = async (eventObj) => {
   const { user_id, vote_value } = eventObj;
   const query = 'INSERT INTO votes (user_id, round_id, vote_value) VALUES (?, (SELECT round_id FROM rounds WHERE room_id = (SELECT room_id FROM users WHERE user_id = ?) ORDER BY created_at DESC LIMIT 1), ?) ON DUPLICATE KEY UPDATE vote_value = ?';
 
@@ -73,7 +73,7 @@ exports.vote = async (eventObj) => {
 };
 
 // Reveal Votes
-exports.revealVotes = async (eventObj) => {
+export const revealVotes = async (eventObj) => {
   const { round_id } = eventObj;
   const query = 'UPDATE rounds SET status = 1 WHERE round_id = ?';
 
@@ -86,7 +86,7 @@ exports.revealVotes = async (eventObj) => {
 };
 
 // Fetch Room Status
-exports.fetchRoomStatus = async (eventObj) => {
+export const fetchRoomStatus = async (eventObj) => {
   const { room_id } = eventObj;
   const roomQuery = 'SELECT * FROM rooms WHERE room_id = ?';
   const roundQuery = 'SELECT * FROM rounds WHERE room_id = ? ORDER BY created_at DESC LIMIT 1';
@@ -131,7 +131,7 @@ exports.fetchRoomStatus = async (eventObj) => {
 };
 
 // Change Role
-exports.changeRole = async (eventObj) => {
+export const changeRole = async (eventObj) => {
   const { user_id, role } = eventObj;
   const updateRoleQuery = 'UPDATE users SET role = ? WHERE user_id = ?';
   const deleteVotesQuery = 'DELETE FROM votes WHERE user_id = ?';
