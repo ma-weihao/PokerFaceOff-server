@@ -14,7 +14,6 @@ export const initialize = (context, callback) => {
   });
   console.log('connection', connection);
   connection.connect((err) => {
-    console.log('connected', connection);
     if (err) {
       console.log('[MYSQL CONNECTION ERROR] - ', err.message);
       callback(err)
@@ -23,6 +22,12 @@ export const initialize = (context, callback) => {
     callback(null, 'succ');
   });
 };
+
+export const pre_stop = (context, callback) => {
+  console.log('pre_stop start');
+  connection.end();
+  callback(null, '');
+}
 
 import * as apiHandler from './apiHandler.js';
 
@@ -69,8 +74,8 @@ export const handler = async (event, context) => {
       case '/votestatus':
         response = await apiHandler.fetchRoomStatus(inputObj);
         break;
-      case '/changerole':
-        response = await apiHandler.changeRole(inputObj);
+      case '/editprofile':
+        response = await apiHandler.editProfile(inputObj);
         break;
       default:
         throw new Error('Unknown endpoint');

@@ -1,4 +1,4 @@
-# This is the backend for an agile planning poker app.
+# This Node.js project is the backend for an agile planning poker app. All http requests are received by the `index.mjs` file. `apiHandler.js` is the handler for all requests.
 
 ## All created tables:
 ```sql
@@ -41,7 +41,7 @@ CREATE TABLE `votes` (
   `vote_id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `user_id` bigint NOT NULL,
   `round_id` bigint NOT NULL,
-  `vote_value` int NOT NULL DEFAULT '-1',
+  `vote_value` int NOT NULL DEFAULT '-1' COMMENT '-1 means not voted, -2 means skipped, 0-100 means voted',
   PRIMARY KEY (`vote_id`),
   UNIQUE KEY `uni_user_round` (`user_id`,`round_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci

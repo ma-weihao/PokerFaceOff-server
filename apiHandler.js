@@ -35,11 +35,11 @@ export const createRoom = async (eventObj) => {
 
 // Join a Room
 export const joinRoom = async (eventObj) => {
-  const { username, avatar_url, role, room_id } = eventObj;
-  const query = 'INSERT INTO users (username, avatar_url, role, room_id) VALUES (?, ?, ?, ?)';
+  const { user_name, avatar_url, role, room_id, open_id } = eventObj;
+  const query = 'INSERT INTO users (username, avatar_url, role, room_id, open_id) VALUES (?, ?, ?, ?, ?)';
 
   return new Promise((resolve, reject) => {
-    connection.query(query, [username, avatar_url, role, room_id], (err, result) => {
+    connection.query(query, [user_name, avatar_url, role, room_id, open_id], (err, result) => {
       if (err) return reject(err);
       resolve({ user_id: result.insertId });
     });
@@ -49,12 +49,42 @@ export const joinRoom = async (eventObj) => {
 // Create a Round
 export const createRound = async (eventObj) => {
   const { room_id } = eventObj;
-  const query = 'INSERT INTO rounds (room_id, round_number) VALUES (?, (SELECT COALESCE(MAX(round_number), 0) + 1 FROM rounds WHERE room_id = ?))';
+  const updateLatestRoundQuery = `
+    UPDATE rounds 
+    SET status = 1 
+    WHERE round_id = (
+      SELECT latest_round_id FROM (
+        SELECT round_id AS latest_round_id 
+        FROM rounds 
+        WHERE room_id = ? 
+        ORDER BY created_at DESC 
+        LIMIT 1
+      ) AS subquery
+    )
+  `;
+  const insertNewRoundQuery = `
+    INSERT INTO rounds (room_id, round_number) 
+    VALUES (?, (SELECT COALESCE(MAX(round_number), 0) + 1 FROM (SELECT * FROM rounds) AS subquery WHERE room_id = ?))
+  `;
 
   return new Promise((resolve, reject) => {
-    connection.query(query, [room_id, room_id], (err) => {
+    connection.beginTransaction(err => {
       if (err) return reject(err);
-      resolve({});
+
+      // Mark the latest round as revealed
+      connection.query(updateLatestRoundQuery, [room_id], (err) => {
+        if (err) return connection.rollback(() => reject(err));
+
+        // Insert a new round
+        connection.query(insertNewRoundQuery, [room_id, room_id], (err) => {
+          if (err) return connection.rollback(() => reject(err));
+
+          connection.commit(err => {
+            if (err) return connection.rollback(() => reject(err));
+            resolve({});
+          });
+        });
+      });
     });
   });
 };
@@ -62,7 +92,10 @@ export const createRound = async (eventObj) => {
 // Vote
 export const vote = async (eventObj) => {
   const { user_id, vote_value } = eventObj;
-  const query = 'INSERT INTO votes (user_id, round_id, vote_value) VALUES (?, (SELECT round_id FROM rounds WHERE room_id = (SELECT room_id FROM users WHERE user_id = ?) ORDER BY created_at DESC LIMIT 1), ?) ON DUPLICATE KEY UPDATE vote_value = ?';
+  const query = `
+    INSERT INTO votes (user_id, round_id, vote_value) 
+    VALUES (?, (SELECT round_id FROM rounds WHERE room_id = (SELECT room_id FROM users WHERE user_id = ?) ORDER BY created_at DESC LIMIT 1), ?) 
+    ON DUPLICATE KEY UPDATE vote_value = ?`;
 
   return new Promise((resolve, reject) => {
     connection.query(query, [user_id, user_id, vote_value, vote_value], (err) => {
@@ -90,7 +123,12 @@ export const fetchRoomStatus = async (eventObj) => {
   const { room_id } = eventObj;
   const roomQuery = 'SELECT * FROM rooms WHERE room_id = ?';
   const roundQuery = 'SELECT * FROM rounds WHERE room_id = ? ORDER BY created_at DESC LIMIT 1';
-  const votesQuery = 'SELECT u.user_id, u.username, u.avatar_url, u.role, v.vote_value FROM users u LEFT JOIN votes v ON u.user_id = v.user_id WHERE u.room_id = ? AND v.round_id = ?';
+  const votesQuery = `
+    SELECT u.user_id, u.username, u.avatar_url, u.role, COALESCE(v.vote_value, -1) AS vote_value 
+    FROM users u 
+    LEFT JOIN votes v ON u.user_id = v.user_id AND v.round_id = ?
+    WHERE u.room_id = ?
+  `;
 
   return new Promise((resolve, reject) => {
     connection.query(roomQuery, [room_id], (err, roomResults) => {
@@ -103,7 +141,7 @@ export const fetchRoomStatus = async (eventObj) => {
         if (roundResults.length === 0) return reject(new Error('No rounds found'));
 
         const round = roundResults[0];
-        connection.query(votesQuery, [room_id, round.round_id], (err, userResults) => {
+        connection.query(votesQuery, [round.round_id, room_id], (err, userResults) => {
           if (err) return reject(err);
 
           const users = userResults.map(user => ({
@@ -111,7 +149,7 @@ export const fetchRoomStatus = async (eventObj) => {
             user_id: user.user_id,
             user_name: user.username,
             avatar_url: user.avatar_url,
-            vote: user.vote_value || -1
+            vote: user.vote_value
           }));
 
           resolve({
@@ -130,27 +168,55 @@ export const fetchRoomStatus = async (eventObj) => {
   });
 };
 
-// Change Role
-export const changeRole = async (eventObj) => {
-  const { user_id, role } = eventObj;
-  const updateRoleQuery = 'UPDATE users SET role = ? WHERE user_id = ?';
-  const deleteVotesQuery = 'DELETE FROM votes WHERE user_id = ?';
+// Edit Profile
+export const editProfile = async (eventObj) => {
+  const { user_id, role, user_name, avatar_url } = eventObj;
+  const updateFields = [];
+  const updateValues = [];
+
+  if (role !== undefined) {
+    updateFields.push('role = ?');
+    updateValues.push(role);
+  }
+  if (user_name !== undefined) {
+    updateFields.push('username = ?');
+    updateValues.push(user_name);
+  }
+  if (avatar_url !== undefined) {
+    updateFields.push('avatar_url = ?');
+    updateValues.push(avatar_url);
+  }
+
+  if (updateFields.length === 0) {
+    return Promise.reject(new Error('No fields to update'));
+  }
+
+  const updateProfileQuery = `UPDATE users SET ${updateFields.join(', ')} WHERE user_id = ?`;
+  updateValues.push(user_id);
 
   return new Promise((resolve, reject) => {
     connection.beginTransaction(err => {
       if (err) return reject(err);
 
-      connection.query(updateRoleQuery, [role, user_id], (err) => {
+      connection.query(updateProfileQuery, updateValues, (err) => {
         if (err) return connection.rollback(() => reject(err));
 
-        connection.query(deleteVotesQuery, [user_id], (err) => {
-          if (err) return connection.rollback(() => reject(err));
+        if (role !== undefined) {
+          const deleteVotesQuery = 'DELETE FROM votes WHERE user_id = ?';
+          connection.query(deleteVotesQuery, [user_id], (err) => {
+            if (err) return connection.rollback(() => reject(err));
 
+            connection.commit(err => {
+              if (err) return connection.rollback(() => reject(err));
+              resolve({});
+            });
+          });
+        } else {
           connection.commit(err => {
             if (err) return connection.rollback(() => reject(err));
             resolve({});
           });
-        });
+        }
       });
     });
   });
