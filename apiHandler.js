@@ -107,15 +107,40 @@ export const vote = async (eventObj) => {
 
 // Reveal Votes
 export const revealVotes = async (eventObj) => {
-  const { round_id } = eventObj;
+  const { round_id, room_id } = eventObj;
   const query = 'UPDATE rounds SET status = 1 WHERE round_id = ?';
+  const roundQuery = 'SELECT * FROM rounds WHERE round_id = ?';
+  const latestRoundQuery = 'SELECT * FROM rounds WHERE room_id = ? ORDER BY created_at DESC LIMIT 1';
 
   return new Promise((resolve, reject) => {
-    connection.query(query, [round_id], (err) => {
-      if (err) return reject(err);
-      resolve({});
-    });
+    // If round_id is null, find the latest round for the room
+    if (!round_id && room_id) {
+      connection.query(latestRoundQuery, [room_id], (err, latestRoundResults) => {
+        if (err) return reject(err);
+        if (latestRoundResults.length === 0) return reject(new Error('No rounds found for this room'));
+
+        const latestRound = latestRoundResults[0];
+        updateAndFetchRound(latestRound.round_id, resolve, reject);
+      });
+    } else if (round_id) {
+      updateAndFetchRound(round_id, resolve, reject);
+    } else {
+      reject(new Error('Either round_id or room_id must be provided'));
+    }
   });
+
+  function updateAndFetchRound(roundId, resolve, reject) {
+    connection.query(query, [roundId], (err) => {
+      if (err) return reject(err);
+      
+      connection.query(roundQuery, [roundId], (err, roundResults) => {
+        if (err) return reject(err);
+        if (roundResults.length === 0) return reject(new Error('Round not found'));
+
+        resolve(roundResults[0]);
+      });
+    });
+  }
 };
 
 // Fetch Room Status
